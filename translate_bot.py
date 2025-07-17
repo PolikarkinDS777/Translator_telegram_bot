@@ -21,6 +21,8 @@ ALLOWED_USERS = {
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 DEEPL_API_KEY = os.getenv("DEEPL_API_KEY")
 DEEPL_API_URL = os.getenv("DEEPL_API_URL")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+PORT = int(os.getenv("PORT", "10000"))
 
 USAGE_FILE = "usage.json"
 CHAR_LIMIT = 500_000
@@ -147,5 +149,17 @@ async def translate_handler(message: Message):
     except Exception as e:
         await message.answer(f"Error requesting DeepL: {e}")
 
+async def on_startup(bot):
+    await bot.set_webhook(WEBHOOK_URL)
+
+
 if __name__ == "__main__":
-    asyncio.run(dp.start_polling(bot))
+    dp.startup.register(on_startup)
+    asyncio.run(
+        dp.start_webhook(
+            bot,
+            webhook_path="/",
+            host="0.0.0.0",
+            port=PORT,
+        )
+    )
