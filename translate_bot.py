@@ -8,15 +8,13 @@ from aiogram.filters import Command
 from aiogram.enums import ParseMode
 from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from aiogram.client.default import DefaultBotProperties
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from aiohttp import web
 from dotenv import load_dotenv
 
-load_dotenv()  # загружает все переменные из .env в окружение
+load_dotenv()
 
-
-# --- WHITELIST USERS HERE ---
-ALLOWED_USERS = {
-    int(uid) for uid in os.getenv("ALLOWED_USERS", "").split(",") if uid.strip()
-}
+ALLOWED_USERS = {int(uid) for uid in os.getenv("ALLOWED_USERS", "").split(",") if uid.strip()}
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 DEEPL_API_KEY = os.getenv("DEEPL_API_KEY")
@@ -149,17 +147,16 @@ async def translate_handler(message: Message):
     except Exception as e:
         await message.answer(f"Error requesting DeepL: {e}")
 
-async def on_startup(bot):
+# --- WEBHOOK STARTUP ---
+async def on_startup(app):
     await bot.set_webhook(WEBHOOK_URL)
 
+def main():
+    app = web.Application()
+    SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path="/")
+    app.on_startup.append(on_startup)
+    setup_application(app, dp, bot=bot)
+    web.run_app(app, host="0.0.0.0", port=PORT)
 
 if __name__ == "__main__":
-    dp.startup.register(on_startup)
-    asyncio.run(
-        dp.start_webhook(
-            bot,
-            webhook_path="/",
-            host="0.0.0.0",
-            port=PORT,
-        )
-    )
+    main()
