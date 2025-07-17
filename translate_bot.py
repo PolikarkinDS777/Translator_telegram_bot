@@ -1,6 +1,8 @@
 import asyncio
 import requests
 import os
+import json
+from datetime import datetime
 from aiogram import Bot, Dispatcher
 from aiogram.filters import Command
 from aiogram.enums import ParseMode
@@ -20,6 +22,9 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 DEEPL_API_KEY = os.getenv("DEEPL_API_KEY")
 DEEPL_API_URL = os.getenv("DEEPL_API_URL")
 
+USAGE_FILE = "usage.json"
+CHAR_LIMIT = 500_000
+
 language_pairs = {
     "en-ru": ("EN", "RU"),
     "ru-en": ("RU", "EN"),
@@ -31,6 +36,35 @@ user_lang_choice = {}
 
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
+
+
+def _load_usage():
+    month = datetime.utcnow().strftime("%Y-%m")
+    data = {}
+    if os.path.exists(USAGE_FILE):
+        try:
+            with open(USAGE_FILE, "r") as f:
+                data = json.load(f)
+        except Exception:
+            data = {}
+    used = data.get(month, 0)
+    return {month: used}
+
+
+def _save_usage(data: dict):
+    with open(USAGE_FILE, "w") as f:
+        json.dump(data, f)
+
+
+def check_and_update_usage(text_length: int) -> bool:
+    data = _load_usage()
+    month = next(iter(data))
+    used = data[month]
+    if used + text_length > CHAR_LIMIT:
+        return False
+    data[month] = used + text_length
+    _save_usage(data)
+    return True
 
 def is_allowed(user_id):
     return user_id in ALLOWED_USERS
@@ -97,6 +131,12 @@ async def translate_handler(message: Message):
     user_text = message.text.strip()
     if not user_text:
         await message.answer("Send me the text for translation.")
+        return
+
+    if not check_and_update_usage(len(user_text)):
+        await message.answer(
+            "⚠️ Limit exceeded. Please try again next month or contact the bot owner."
+        )
         return
 
     try:
