@@ -219,7 +219,7 @@ async def translate_handler(message: Message):
 
         commit_usage(len(user_text))
 
-        await message.answer(f"<b>Translation:</b>\n{translation}")
+        await message.answer(f"</b>\n{translation}")
 
     except Exception as e:
         await message.answer(f"Error requesting DeepL: {e}")
