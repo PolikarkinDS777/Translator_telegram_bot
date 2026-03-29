@@ -2,6 +2,7 @@ import asyncio
 import requests
 import os
 import json
+import html
 from datetime import datetime
 from aiogram import Bot, Dispatcher
 from aiogram.filters import Command
@@ -26,6 +27,7 @@ PORT = int(os.getenv("PORT", "10000"))
 
 USAGE_FILE = "usage.json"
 CHAR_LIMIT = 500_000
+TELEGRAM_MESSAGE_LIMIT = 4000  # запас до лимита Telegram ~4096
 
 language_pairs = {
     "en-ru": ("EN", "RU"),
@@ -89,6 +91,41 @@ def commit_usage(text_length: int):
 
 def is_allowed(user_id):
     return user_id in ALLOWED_USERS
+
+
+def split_text(text: str, limit: int = TELEGRAM_MESSAGE_LIMIT):
+    chunks = []
+    current = ""
+
+    for line in text.splitlines(keepends=True):
+        if len(current) + len(line) <= limit:
+            current += line
+        else:
+            if current:
+                chunks.append(current)
+                current = ""
+
+            while len(line) > limit:
+                chunks.append(line[:limit])
+                line = line[limit:]
+
+            current = line
+
+    if current:
+        chunks.append(current)
+
+    if not chunks:
+        chunks = [""]
+
+    return chunks
+
+
+async def send_translation(message: Message, translation: str):
+    safe_translation = html.escape(translation)
+    chunks = split_text(safe_translation, TELEGRAM_MESSAGE_LIMIT)
+
+    for chunk in chunks:
+        await message.answer(chunk)
 
 
 @dp.message(Command("start"))
@@ -167,7 +204,7 @@ def deepl_translate(text: str, src: str, tgt: str) -> str:
         DEEPL_API_URL,
         headers=headers,
         data=data,
-        timeout=30
+        timeout=60
     )
 
     if not resp.ok:
@@ -218,14 +255,13 @@ async def translate_handler(message: Message):
         )
 
         commit_usage(len(user_text))
-
-        await message.answer(f"</b>\n{translation}")
+        await send_translation(message, translation)
 
     except Exception as e:
-        await message.answer(f"Error requesting DeepL: {e}")
+        safe_error = html.escape(str(e))
+        await message.answer(f"Error requesting DeepL: {safe_error}")
 
 
-# --- WEBHOOK STARTUP ---
 async def on_startup(app):
     await bot.set_webhook(WEBHOOK_URL)
 
